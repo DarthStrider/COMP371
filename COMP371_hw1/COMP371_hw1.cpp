@@ -52,10 +52,11 @@ float y = 0;
 float z = 0;
 glm::vec3 cameraPosition = glm::vec3(x, y, z);
 GLuint shader_program = 0;
-GLuint vbo[3];
+GLuint vbo[4];
 GLuint vao[2];
 GLuint MVP_id = 0;
 GLuint jetTexture;
+GLuint buildTexture;
 GLuint TextureID;
 bool res;
 ///Transformations
@@ -70,6 +71,10 @@ glm::mat4 MVP;
 int w = 1200;
 int h = 900;
 
+float xJet,yJet,zJet;
+float lastTime = glfwGetTime();
+float currentTime;
+float deltaTime;
 //textures
 
 unsigned char header[54];
@@ -312,7 +317,8 @@ void loadJet()
 
 void loadBuilding()
 {
-	res = loadOBJ("Building.obj", buildVertices, buildUvs, buildNormals);
+	res = loadOBJ("cube.obj", buildVertices, buildUvs, buildNormals);
+	buildTexture = raw_texture_load("uvtemplate.bmp", 512, 512);
 	if (res == false) {
 		cout << "Building could not be loaded" << endl;
 		exit(1);
@@ -320,16 +326,29 @@ void loadBuilding()
 }
 
 
-void moveJet(float xJet, float yJet, float zJet) {
+
+
+void setJet(float xi, float yi, float zi) {
 	rotation = glm::rotate(identityM, -120.0f, glm::vec3(1, 0, 0));
-	translation = glm::translate(identityM, glm::vec3(xJet, yJet, zJet));
+	translation = glm::translate(identityM, glm::vec3(xi, yi, zi));
 	jetModel = translation * rotation;
 }
 
-void moveBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
+void setBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
 	rotation = glm::rotate(identityM, rBuild, glm::vec3(0, 1, 0));
 	translation = glm::translate(identityM, glm::vec3(xBuild, yBuild, zBuild));
 	buildModel = translation * rotation *  identityM;
+}
+
+void moveJet(float speed) {
+	currentTime = glfwGetTime();
+	deltaTime = currentTime - lastTime;
+	float distance = deltaTime*speed;
+	zJet += distance;
+	translation = glm::translate(translation, glm::vec3(0, 0, distance));
+	jetModel = translation * rotation;
+	z += distance;
+	cameraPosition = glm::vec3(x,y,z);
 }
 
 int main() {
@@ -341,8 +360,11 @@ int main() {
 
 	loadJet();
 	loadBuilding();
-	moveJet(0, 30.0f, -15.0f);
-	moveBuilding(25.0f, 0.0f, 35.0f, 180.0f);
+	xJet = 0;
+	yJet = 30.0f;
+	zJet = -15.0f;
+	setJet(xJet, yJet, zJet);
+	setBuilding(25.0f, 0.0f, 35.0f, 180.0f);
 	
 
 	///Load the shaders
@@ -350,7 +372,7 @@ int main() {
 
 	view = glm::lookAt(
 		camera + cameraPosition,
-		look,
+		look + cameraPosition,
 		up
 		);
 
@@ -358,7 +380,7 @@ int main() {
 	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 300.0f);
 	
 	glGenVertexArrays(2, vao);
-	glGenBuffers(3, vbo);
+	glGenBuffers(4, vbo);
 	
 	glBindVertexArray(vao[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -374,20 +396,32 @@ int main() {
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 
-	//glBindVertexArray(vao[1]);
-	//glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-	//glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
-	//glEnableVertexAttribArray(0);
-	//glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindVertexArray(vao[1]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
+	glBufferData(GL_ARRAY_BUFFER, buildUvs.size() * sizeof(glm::vec2), &buildUvs[0], GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	while (!glfwWindowShouldClose(window)) {
 		// wipe the drawing surface clear
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPointSize(point_size);
 		
 		glUseProgram(shader_program);
+
 		
-		//Pass the values of the three matrices to the shaders
-		
+		moveJet(5.0f);
+		view = glm::lookAt(
+			camera + cameraPosition,
+			look + cameraPosition,
+			up
+			);
+	
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -397,12 +431,17 @@ int main() {
 
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
+		
 
 		MVP = projection*view*buildModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, buildTexture);
+		// Set our "myTextureSampler" sampler to user Texture Unit 0
+		glUniform1i(TextureID, 0);
 
-		//glBindVertexArray(vao[1]);
-		//glDrawArrays(GL_POINTS, 0, buildVertices.size());
+		glBindVertexArray(vao[1]);
+		glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
 
 		//TODO: Once you have passed all information you are ready to do the drawing
 		//glDrawElements(..........)
@@ -411,6 +450,7 @@ int main() {
 		glfwPollEvents();
 		// put the stuff we've been drawing onto the display
 		glfwSwapBuffers(window);
+		lastTime = glfwGetTime();
 	}
 
 	cleanUp();
