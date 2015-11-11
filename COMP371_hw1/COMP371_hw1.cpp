@@ -329,7 +329,11 @@ void loadBuilding()
 
 
 void setJet(float xi, float yi, float zi) {
-	rotation = glm::rotate(identityM, -120.0f, glm::vec3(1, 0, 0));
+	glm::mat4 rot;
+	rotation = glm::rotate(identityM, 120.0f, glm::vec3(0, 0, 1));
+	glm::mat4 rot1;
+	rot1 = glm::rotate(identityM, 180.0f, glm::vec3(0, 1,0 ));
+	
 	translation = glm::translate(identityM, glm::vec3(xi, yi, zi));
 	jetModel = translation * rotation;
 }
@@ -345,7 +349,7 @@ void moveJet(float speed) {
 	deltaTime = currentTime - lastTime;
 	float distance = deltaTime*speed;
 	zJet += distance;
-	translation = glm::translate(translation, glm::vec3(0, 0, distance));
+	translation = glm::translate(identityM, glm::vec3(xJet, yJet, zJet));
 	jetModel = translation * rotation;
 	z += distance;
 	cameraPosition = glm::vec3(x,y,z);
@@ -371,8 +375,8 @@ int main() {
 	shader_program = loadShaders("COMP371_hw1.vs", "COMP371_hw1.fs");
 
 	view = glm::lookAt(
-		camera + cameraPosition,
-		look + cameraPosition,
+		camera,
+		look,
 		up
 		);
 
@@ -408,6 +412,7 @@ int main() {
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	while (!glfwWindowShouldClose(window)) {
+		lastTime = glfwGetTime();
 		// wipe the drawing surface clear
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPointSize(point_size);
@@ -450,7 +455,7 @@ int main() {
 		glfwPollEvents();
 		// put the stuff we've been drawing onto the display
 		glfwSwapBuffers(window);
-		lastTime = glfwGetTime();
+		
 	}
 
 	cleanUp();
