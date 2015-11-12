@@ -70,7 +70,7 @@ glm::mat4 identityM = glm::mat4(1.0f);
 glm::mat4 MVP;
 int w = 1200;
 int h = 900;
-
+float distance;
 float xJet,yJet,zJet;
 float lastTime = glfwGetTime();
 float currentTime;
@@ -306,7 +306,7 @@ GLuint raw_texture_load(const char *filename, int width, int height)
 
 void loadJet() 
 {
-	res = loadOBJ("FA-22_Raptor.obj", jetVertices, jetUvs, jetNormals);
+	res = loadOBJ("FA_22_Raptor3.obj", jetVertices, jetUvs, jetNormals);
 	jetTexture = raw_texture_load("FA-22_Raptor_P01.bmp",1024,1024);
 	if (res == false) {
 		cout << "Jet could not be loaded" << endl;
@@ -329,9 +329,15 @@ void loadBuilding()
 
 
 void setJet(float xi, float yi, float zi) {
-	rotation = glm::rotate(identityM, -120.0f, glm::vec3(1, 0, 0));
+	glm::mat4 rot;
+	glm::mat4 rot1;
+	glm::mat4 rot2;
+	rot = glm::rotate(identityM, 90.0f, glm::vec3(1, 0, 0));
+	rot1 = glm::rotate(identityM, 180.0f, glm::vec3(0, 0, 1));
+	rot2 = glm::rotate(identityM, -45.0f, glm::vec3(0, 0, 1));
+	rotation = rot2*rot1*rot;
 	translation = glm::translate(identityM, glm::vec3(xi, yi, zi));
-	jetModel = translation * rotation;
+	jetModel = translation;
 }
 
 void setBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
@@ -343,12 +349,13 @@ void setBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
 void moveJet(float speed) {
 	currentTime = glfwGetTime();
 	deltaTime = currentTime - lastTime;
-	float distance = deltaTime*speed;
-	zJet += distance;
-	translation = glm::translate(translation, glm::vec3(0, 0, distance));
-	jetModel = translation * rotation;
-	z += distance;
-	cameraPosition = glm::vec3(x,y,z);
+	float d;
+	d = deltaTime*speed;
+	zJet += d;
+	translation = glm::translate(identityM, glm::vec3(xJet, yJet,zJet));
+	jetModel = translation;
+	z += d;
+	cameraPosition = glm::vec3(x, y, z);
 }
 
 int main() {
@@ -364,7 +371,7 @@ int main() {
 	yJet = 30.0f;
 	zJet = -15.0f;
 	setJet(xJet, yJet, zJet);
-	setBuilding(25.0f, 0.0f, 35.0f, 180.0f);
+	setBuilding(25.0f, 0.0f, 80.0f, 180.0f);
 	
 
 	///Load the shaders
@@ -414,8 +421,8 @@ int main() {
 		
 		glUseProgram(shader_program);
 
-		
-		moveJet(5.0f);
+		lastTime = glfwGetTime();
+		moveJet(500000.0f);
 		view = glm::lookAt(
 			camera + cameraPosition,
 			look + cameraPosition,
