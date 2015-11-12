@@ -330,19 +330,6 @@ void loadBuilding()
 
 void setJet(float xi, float yi, float zi) {
 	glm::mat4 rot;
-<<<<<<< HEAD
-	glm::mat4 rot1;
-	glm::mat4 rot2;
-	rot = glm::rotate(identityM, 90.0f, glm::vec3(1, 0, 0));
-	rot1 = glm::rotate(identityM, 180.0f, glm::vec3(0, 0, 1));
-	rot2 = glm::rotate(identityM, -45.0f, glm::vec3(0, 0, 1));
-	rotation = rot2*rot1*rot;
-=======
-	rotation = glm::rotate(identityM, 120.0f, glm::vec3(0, 0, 1));
-	glm::mat4 rot1;
-	rot1 = glm::rotate(identityM, 180.0f, glm::vec3(0, 1,0 ));
-	
->>>>>>> origin/master
 	translation = glm::translate(identityM, glm::vec3(xi, yi, zi));
 	jetModel = translation;
 }
@@ -356,7 +343,6 @@ void setBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
 void moveJet(float speed) {
 	currentTime = glfwGetTime();
 	deltaTime = currentTime - lastTime;
-<<<<<<< HEAD
 	float d;
 	d = deltaTime*speed;
 	zJet += d;
@@ -364,14 +350,6 @@ void moveJet(float speed) {
 	jetModel = translation;
 	z += d;
 	cameraPosition = glm::vec3(x, y, z);
-=======
-	float distance = deltaTime*speed;
-	zJet += distance;
-	translation = glm::translate(identityM, glm::vec3(xJet, yJet, zJet));
-	jetModel = translation * rotation;
-	z += distance;
-	cameraPosition = glm::vec3(x,y,z);
->>>>>>> origin/master
 }
 
 int main() {
