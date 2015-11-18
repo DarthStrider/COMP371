@@ -42,31 +42,44 @@ std::vector<glm::vec3> buildVertices;
 std::vector<glm::vec2> buildUvs;
 std::vector<glm::vec3> buildNormals;
 
+std::vector<glm::vec3> terrainVertices;
+std::vector<glm::vec2> terrainUvs;
+std::vector<glm::vec3> terrainNormals;
 
 //Camera Vector Locations
-glm::vec3 camera = glm::vec3(0, 55, -80); // Camera is at (0,3,-5), in World Space
+glm::vec3 camera = glm::vec3(0, 45, -55); // Camera is at (0,3,-5), in World Space
 glm::vec3 look = glm::vec3(0, 0,0); // and looks at the origin
 glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
 float y = 0;
 float z = 0;
-glm::vec3 cameraPosition = glm::vec3(x, y, z);
 GLuint shader_program = 0;
-GLuint vbo[4];
-GLuint vao[2];
+GLuint vbo[6];
+GLuint vao[3];
 GLuint MVP_id = 0;
 GLuint jetTexture;
 GLuint buildTexture;
+GLuint terrainTexture;
 GLuint TextureID;
 bool res;
 ///Transformations
 glm::mat4 view; 
 glm::mat4 projection;
-glm::mat4 translation = glm::mat4(1.0f);
-glm::mat4 rotation = glm::mat4(1.0f);
+
+glm::mat4 jetTranslation = glm::mat4(1.0f);
+glm::mat4 jetRotation = glm::mat4(1.0f);
+
+glm::mat4 terrainTranslation[4];
+glm::mat4 terrainScale = glm::mat4(1.0f);
+
+glm::mat4 buildTranslation = glm::mat4(1.0f);
+glm::mat4 buildRotation = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
+
 glm::mat4 buildModel = glm::mat4(1.0f);
+vector<glm::mat4> terrainModels;
 glm::mat4 identityM = glm::mat4(1.0f);
+
 glm::mat4 MVP;
 int w = 1200;
 int h = 900;
@@ -307,7 +320,7 @@ GLuint raw_texture_load(const char *filename, int width, int height)
 void loadJet() 
 {
 	res = loadOBJ("FA_22_Raptor3.obj", jetVertices, jetUvs, jetNormals);
-	jetTexture = raw_texture_load("FA-22_Raptor_P01.bmp",1024,1024);
+	jetTexture = loadBMP_custom("FA-22_Raptor_P01.bmp");
 	if (res == false) {
 		cout << "Jet could not be loaded" << endl;
 		exit(1);
@@ -315,10 +328,20 @@ void loadJet()
 	cout << jetUvs.size() << endl;
 }
 
+void loadTerrain()
+{
+	res = loadOBJ("cube.obj", terrainVertices, terrainUvs, terrainNormals);
+	terrainTexture= loadBMP_custom("grass.bmp");
+	if (res == false) {
+		cout << "Terrain could not be loaded" << endl;
+		exit(1);
+	}
+}
+
 void loadBuilding()
 {
 	res = loadOBJ("cube.obj", buildVertices, buildUvs, buildNormals);
-	buildTexture = raw_texture_load("uvtemplate.bmp", 512, 512);
+	buildTexture = loadBMP_custom("uvtemplate.bmp");
 	if (res == false) {
 		cout << "Building could not be loaded" << endl;
 		exit(1);
@@ -327,17 +350,24 @@ void loadBuilding()
 
 
 
-
 void setJet(float xi, float yi, float zi) {
 	glm::mat4 rot;
-	translation = glm::translate(identityM, glm::vec3(xi, yi, zi));
-	jetModel = translation;
+	jetTranslation = glm::translate(identityM, glm::vec3(xi, yi, zi));
+	jetModel = jetTranslation;
 }
 
-void setBuilding(float xBuild,float yBuild,float zBuild, float rBuild) {
-	rotation = glm::rotate(identityM, rBuild, glm::vec3(0, 1, 0));
-	translation = glm::translate(identityM, glm::vec3(xBuild, yBuild, zBuild));
-	buildModel = translation * rotation *  identityM;
+void setTerrain(float xTerrain,float yTerrain,float zTerrain) {
+	for (int i = 0; i < 4; i++) {
+		terrainTranslation[i] = glm::translate(identityM, glm::vec3(xTerrain, yTerrain, (zTerrain+(i*120))));
+		terrainScale = glm::scale(identityM, glm::vec3(80.0f, 0.05f, 60.0f));
+		terrainModels.push_back(terrainTranslation[i] * terrainScale);
+	}
+}
+
+void setBuilding(float xBuild, float yBuild, float zBuild) {
+	buildTranslation = glm::translate(terrainModels[0], glm::vec3(xBuild, yBuild, zBuild));
+	terrainScale = glm::scale(identityM, glm::vec3(1/80.0f, 1/0.05f, 1/60.0f));
+	buildModel = buildTranslation * terrainScale;
 }
 
 void moveJet(float speed) {
@@ -346,10 +376,16 @@ void moveJet(float speed) {
 	float d;
 	d = deltaTime*speed;
 	zJet += d;
-	translation = glm::translate(identityM, glm::vec3(xJet, yJet,zJet));
-	jetModel = translation;
-	z += d;
-	cameraPosition = glm::vec3(x, y, z);
+	jetTranslation = glm::translate(identityM, glm::vec3(xJet, yJet,zJet));
+	jetModel = jetTranslation;
+	camera.z += d;
+	look.z += d;
+}
+
+void loadObjects() {
+	loadJet();
+	loadTerrain();
+	loadBuilding();
 }
 
 int main() {
@@ -358,14 +394,13 @@ int main() {
 	assert(sizeof(glm::uvec3) == sizeof(unsigned int) * 3);
 
 	initialize();
-
-	loadJet();
-	loadBuilding();
+	loadObjects();
 	xJet = 0;
 	yJet = 30.0f;
-	zJet = -15.0f;
+	zJet = 0.0f;
 	setJet(xJet, yJet, zJet);
-	setBuilding(25.0f, 0.0f, 80.0f, 180.0f);
+	setTerrain(0.0f, 0.0f, 0.0f);
+	setBuilding(0.0f, 1.0f, 0.0f);
 	
 
 	///Load the shaders
@@ -380,8 +415,8 @@ int main() {
 	//create the projection matrix
 	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 300.0f);
 	
-	glGenVertexArrays(2, vao);
-	glGenBuffers(4, vbo);
+	glGenVertexArrays(3, vao);
+	glGenBuffers(6, vbo);
 	
 	glBindVertexArray(vao[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -399,14 +434,26 @@ int main() {
 
 	glBindVertexArray(vao[1]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-	glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(glm::vec3), &terrainVertices[0], GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
-	glBufferData(GL_ARRAY_BUFFER, buildUvs.size() * sizeof(glm::vec2), &buildUvs[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, terrainUvs.size() * sizeof(glm::vec2), &terrainUvs[0], GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	glBindVertexArray(vao[2]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
+	glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
+	glBufferData(GL_ARRAY_BUFFER, buildUvs.size() * sizeof(glm::vec2), &buildUvs[0], GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 	while (!glfwWindowShouldClose(window)) {
 		lastTime = glfwGetTime();
@@ -417,13 +464,13 @@ int main() {
 		glUseProgram(shader_program);
 
 		lastTime = glfwGetTime();
-		moveJet(500000.0f);
+		moveJet(5000.0f);
 		view = glm::lookAt(
-			camera + cameraPosition,
-			look + cameraPosition,
+			camera,
+			look,
 			up
 			);
-	
+		cout << "Look Z: " << look.z << "Camera Z" << camera.z << endl;
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -434,7 +481,17 @@ int main() {
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
 		
+		for (int i = 0; i < terrainModels.size(); i++) {
+			MVP = projection*view*terrainModels[i];
+			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, terrainTexture);
+			// Set our "myTextureSampler" sampler to user Texture Unit 0
+			glUniform1i(TextureID, 0);
 
+			glBindVertexArray(vao[1]);
+			glDrawArrays(GL_TRIANGLES, 0, terrainVertices.size());
+		}
 		MVP = projection*view*buildModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -442,7 +499,7 @@ int main() {
 		// Set our "myTextureSampler" sampler to user Texture Unit 0
 		glUniform1i(TextureID, 0);
 
-		glBindVertexArray(vao[1]);
+		glBindVertexArray(vao[2]);
 		glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
 
 		//TODO: Once you have passed all information you are ready to do the drawing
