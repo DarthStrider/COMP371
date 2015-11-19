@@ -47,8 +47,8 @@ std::vector<glm::vec2> terrainUvs;
 std::vector<glm::vec3> terrainNormals;
 
 //Camera Vector Locations
-glm::vec3 camera = glm::vec3(0, 45, -55); // Camera is at (0,3,-5), in World Space
-glm::vec3 look = glm::vec3(0, 0,0); // and looks at the origin
+glm::vec3 camera = glm::vec3(0, 35, -65); // Camera is at (0,3,-5), in World Space
+glm::vec3 look = glm::vec3(0, 0,1.0f); // and looks at the origin
 glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
 float y = 0;
@@ -77,7 +77,7 @@ glm::mat4 buildRotation = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
 
 glm::mat4 buildModel = glm::mat4(1.0f);
-vector<glm::mat4> terrainModels;
+vector<glm::mat4> terrainModels (4);
 glm::mat4 identityM = glm::mat4(1.0f);
 
 glm::mat4 MVP;
@@ -88,8 +88,8 @@ float xJet,yJet,zJet;
 float lastTime = glfwGetTime();
 float currentTime;
 float deltaTime;
-//textures
-
+int planes = 0;
+int place = 0;
 unsigned char header[54];
 unsigned int dataPos;
 unsigned int width, height;
@@ -330,7 +330,7 @@ void loadJet()
 
 void loadTerrain()
 {
-	res = loadOBJ("cube.obj", terrainVertices, terrainUvs, terrainNormals);
+	res = loadOBJ("plane.obj", terrainVertices, terrainUvs, terrainNormals);
 	terrainTexture= loadBMP_custom("grass.bmp");
 	if (res == false) {
 		cout << "Terrain could not be loaded" << endl;
@@ -358,10 +358,17 @@ void setJet(float xi, float yi, float zi) {
 
 void setTerrain(float xTerrain,float yTerrain,float zTerrain) {
 	for (int i = 0; i < 4; i++) {
-		terrainTranslation[i] = glm::translate(identityM, glm::vec3(xTerrain, yTerrain, (zTerrain+(i*120))));
-		terrainScale = glm::scale(identityM, glm::vec3(80.0f, 0.05f, 60.0f));
-		terrainModels.push_back(terrainTranslation[i] * terrainScale);
+		terrainTranslation[i] = glm::translate(identityM, glm::vec3(xTerrain, yTerrain, (zTerrain+(planes*170))));
+		terrainModels.push_back(terrainTranslation[i]);
+		++planes;
 	}
+}
+
+void resize(int i) {
+	terrainTranslation[i]= glm::translate(identityM, glm::vec3(0, 0, (0 + (planes * 170))));
+	terrainModels.push_back(terrainTranslation[i]);
+	++planes;
+
 }
 
 void setBuilding(float xBuild, float yBuild, float zBuild) {
@@ -464,7 +471,7 @@ int main() {
 		glUseProgram(shader_program);
 
 		lastTime = glfwGetTime();
-		moveJet(5000.0f);
+		moveJet(50000.0f);
 		view = glm::lookAt(
 			camera,
 			look,
@@ -480,7 +487,15 @@ int main() {
 
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
-		
+
+		if ((int)look.z % 170 == 0) {
+			if (place == 4) {
+				place = 0;
+			}
+			resize(place);
+			++place;
+		}
+	
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
 			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
@@ -508,6 +523,7 @@ int main() {
 		// update other events like input handling 
 		glfwPollEvents();
 		// put the stuff we've been drawing onto the display
+
 		glfwSwapBuffers(window);
 		
 	}
