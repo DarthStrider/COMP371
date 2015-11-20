@@ -31,7 +31,7 @@ using namespace std;
 #define DEG_TO_RAD	M_PI/180.0f
 
 GLFWwindow* window = 0x00;
-
+void refresh();
 //Create Vec3 for Vertices, UVs & Normals of Jet
 std::vector<glm::vec3> jetVertices;
 std::vector<glm::vec2> jetUvs;
@@ -77,11 +77,13 @@ glm::mat4 buildRotation = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
 
 glm::mat4 buildModel = glm::mat4(1.0f);
-vector<glm::mat4> terrainModels (4);
+vector <glm::mat4> terrainModels;
+glm::mat4 terrainTemps[4];
 glm::mat4 identityM = glm::mat4(1.0f);
-
+glm::mat4 * trans;
 glm::mat4 MVP;
 int w = 1200;
+int already = 1;
 int h = 900;
 float distance;
 float xJet,yJet,zJet;
@@ -325,7 +327,6 @@ void loadJet()
 		cout << "Jet could not be loaded" << endl;
 		exit(1);
 	}
-	cout << jetUvs.size() << endl;
 }
 
 void loadTerrain()
@@ -341,7 +342,7 @@ void loadTerrain()
 void loadBuilding()
 {
 	res = loadOBJ("cube.obj", buildVertices, buildUvs, buildNormals);
-	buildTexture = loadBMP_custom("uvtemplate.bmp");
+	buildTexture = loadBMP_custom("house.bmp");
 	if (res == false) {
 		cout << "Building could not be loaded" << endl;
 		exit(1);
@@ -356,25 +357,30 @@ void setJet(float xi, float yi, float zi) {
 	jetModel = jetTranslation;
 }
 
-void setTerrain(float xTerrain,float yTerrain,float zTerrain) {
+void setTerrain() {
 	for (int i = 0; i < 4; i++) {
-		terrainTranslation[i] = glm::translate(identityM, glm::vec3(xTerrain, yTerrain, (zTerrain+(planes*170))));
+		terrainTranslation[i] = glm::translate(identityM, glm::vec3(0, 0, (0+(planes)*170)));
 		terrainModels.push_back(terrainTranslation[i]);
 		++planes;
 	}
+	terrainModels.resize(4);
+	terrainModels.shrink_to_fit();
 }
 
-void resize(int i) {
-	terrainTranslation[i]= glm::translate(identityM, glm::vec3(0, 0, (0 + (planes * 170))));
-	terrainModels.push_back(terrainTranslation[i]);
-	++planes;
-
+void resize(int h) {
+	terrainModels.clear();
+	terrainTranslation[h] = glm::translate(identityM, glm::vec3(0, 0, (0 + (planes * 170))));
+	for (int i = 0; i < 4; i++) {
+			terrainModels.push_back(terrainTranslation[i]);
+		}
+	terrainModels.shrink_to_fit();
+	//terrainModels.pop_back();
+++planes;
 }
 
 void setBuilding(float xBuild, float yBuild, float zBuild) {
 	buildTranslation = glm::translate(terrainModels[0], glm::vec3(xBuild, yBuild, zBuild));
-	terrainScale = glm::scale(identityM, glm::vec3(1/80.0f, 1/0.05f, 1/60.0f));
-	buildModel = buildTranslation * terrainScale;
+	buildModel = buildTranslation;
 }
 
 void moveJet(float speed) {
@@ -395,6 +401,13 @@ void loadObjects() {
 	loadBuilding();
 }
 
+void refresh() {
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBufferData(GL_ARRAY_BUFFER, NULL , NULL, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(glm::vec3), &terrainVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+}
 int main() {
 	///Make sure the size of vec3 is the same as 3 floats
 	assert(sizeof(glm::vec3) == sizeof(float) * 3);
@@ -406,8 +419,8 @@ int main() {
 	yJet = 30.0f;
 	zJet = 0.0f;
 	setJet(xJet, yJet, zJet);
-	setTerrain(0.0f, 0.0f, 0.0f);
-	setBuilding(0.0f, 1.0f, 0.0f);
+	setTerrain();
+	setBuilding(59.0f, 1.0f, 79.0f);
 	
 
 	///Load the shaders
@@ -420,7 +433,7 @@ int main() {
 		);
 
 	//create the projection matrix
-	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 300.0f);
+	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 500.0f);
 	
 	glGenVertexArrays(3, vao);
 	glGenBuffers(6, vbo);
@@ -471,13 +484,13 @@ int main() {
 		glUseProgram(shader_program);
 
 		lastTime = glfwGetTime();
-		moveJet(50000.0f);
+		moveJet(30000.0f);
 		view = glm::lookAt(
 			camera,
 			look,
 			up
 			);
-		cout << "Look Z: " << look.z << "Camera Z" << camera.z << endl;
+		//cout << "Look Z: " << look.z << "Camera Z" << camera.z << endl;
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -488,20 +501,11 @@ int main() {
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
 
-		if ((int)look.z % 170 == 0) {
-			if (place == 4) {
-				place = 0;
-			}
-			resize(place);
-			++place;
-		}
-	
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
 			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, terrainTexture);
-			// Set our "myTextureSampler" sampler to user Texture Unit 0
 			glUniform1i(TextureID, 0);
 
 			glBindVertexArray(vao[1]);
@@ -519,7 +523,18 @@ int main() {
 
 		//TODO: Once you have passed all information you are ready to do the drawing
 		//glDrawElements(..........)
+		if ((int)look.z % 170 ==0 && already == 0) {
+			if (place == 4) {
+				place = 0;
+			}
+				resize(place);
+			++place;
+			already = 2;
+		}
 
+		if ((int)look.z % 52 == 0) {
+			already = 0;
+		}
 		// update other events like input handling 
 		glfwPollEvents();
 		// put the stuff we've been drawing onto the display
