@@ -22,6 +22,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <algorithm>
 #include "objloader.hpp"
 #include "texture.hpp"
@@ -47,7 +48,7 @@ std::vector<glm::vec2> terrainUvs;
 std::vector<glm::vec3> terrainNormals;
 
 //Camera Vector Locations
-glm::vec3 camera = glm::vec3(0, 35, -65); // Camera is at (0,3,-5), in World Space
+glm::vec3 camera = glm::vec3(0, 25, -65); // Camera is at (0,3,-5), in World Space
 glm::vec3 look = glm::vec3(0, 0,1.0f); // and looks at the origin
 glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
@@ -77,13 +78,26 @@ glm::mat4 jetRotation = glm::mat4(1.0f);
 glm::mat4 terrainTranslation[4];
 glm::mat4 terrainScale = glm::mat4(1.0f);
 
-glm::mat4 buildTranslation = glm::mat4(1.0f);
-glm::mat4 buildRotation = glm::mat4(1.0f);
-glm::mat4 jetModel = glm::mat4(1.0f);
+glm::mat4 buildTranslation[5];
+glm::mat4 buildRotation[5];
+glm::mat4 buildModel[5];
 
-glm::mat4 buildModel = glm::mat4(1.0f);
+glm::mat4 buildTranslation1[5];
+glm::mat4 buildRotation1[5];
+glm::mat4 buildModel1[5];
+
+glm::mat4 buildTranslation2[5];
+glm::mat4 buildRotation2[5];
+glm::mat4 buildModel2[5];
+
+glm::mat4 buildTranslation3[5];
+glm::mat4 buildRotation3[5];
+glm::mat4 buildModel3[5];
+
+
+glm::mat4 buildScale = glm::mat4(1.0f);
+glm::mat4 jetModel = glm::mat4(1.0f);
 vector <glm::mat4> terrainModels;
-glm::mat4 terrainTemps[4];
 glm::mat4 identityM = glm::mat4(1.0f);
 glm::mat4 * trans;
 glm::mat4 MVP;
@@ -102,6 +116,11 @@ unsigned int dataPos;
 unsigned int width, height;
 unsigned int imageSize;
 unsigned char * data;
+std::random_device rd;
+std::mt19937 mt(rd());
+std::uniform_real_distribution<double> xdistribution(-100.0, 100.0);
+std::uniform_real_distribution<double> zdistribution(-80.0, 80.0);
+std::uniform_real_distribution<double> adistribution(0.0, 360.0);
 ///Change the size of the rendered points
 GLfloat point_size = 1.0f;
 
@@ -285,52 +304,7 @@ GLuint loadShaders(std::string vertex_shader_path, std::string fragment_shader_p
 }
 
 
-GLuint raw_texture_load(const char *filename, int width, int height)
-{
-	GLuint texture;
-	unsigned char *data;
-	FILE *file;
 
-	// open texture data
-	file = fopen(filename, "rb");
-	if (file == NULL) return 0;
-
-	// allocate buffer
-	data = (unsigned char*)malloc(width * height * 4);
-
-	// read texture data
-	fread(data, width * height * 4, 1, file);
-	fclose(file);
-
-	// allocate a texture name
-	glGenTextures(1, &texture);
-
-	// select our current texture
-	glBindTexture(GL_TEXTURE_2D, texture);
-
-	// select modulate to mix texture with color for shading
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_DECAL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_DECAL);
-
-	// when texture area is small, bilinear filter the closest mipmap
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
-	// when texture area is large, bilinear filter the first mipmap
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	// texture should tile
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	// build our texture mipmaps
-	gluBuild2DMipmaps(GL_TEXTURE_2D, 4, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-	// free buffer
-	free(data);
-
-	return texture;
-}
 
 void loadJet() 
 {
@@ -354,8 +328,8 @@ void loadTerrain()
 
 void loadBuilding()
 {
-	res = loadOBJ("cube.obj", buildVertices, buildUvs, buildNormals);
-	buildTexture = loadBMP_custom("house.bmp");
+	res = loadOBJ("Cottage2.obj", buildVertices, buildUvs, buildNormals);
+	buildTexture = loadBMP_custom("cottage.bmp");
 	if (res == false) {
 		cout << "Building could not be loaded" << endl;
 		exit(1);
@@ -390,9 +364,49 @@ void resize(int h) {
 ++planes;
 }
 
-void setBuilding(float xBuild, float yBuild, float zBuild) {
-	buildTranslation = glm::translate(terrainModels[0], glm::vec3(xBuild, yBuild, zBuild));
-	buildModel = buildTranslation;
+void setBuilding() {
+	buildScale = glm::scale(identityM, glm::vec3(0.5f, 0.5f, 0.5f));
+	float j,c,k;
+	for (int i = 0; i < 5; i++) {
+		c = xdistribution(mt);
+		k= zdistribution(mt);
+		cout << "x: " << c<< "Z: " << k << endl;
+		buildTranslation[i] = glm::translate(terrainModels[0], glm::vec3(c, 0.0f,k));
+		j= adistribution(mt);
+		buildRotation[i] = glm::rotate(identityM,j, glm::vec3(0, 1.0f, 0));
+		buildModel[i] = buildTranslation[i] * buildRotation[i] * buildScale;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		c = xdistribution(mt);
+		k = zdistribution(mt);
+		cout << "x: " << c << "Z: " << k << endl;
+		buildTranslation1[i] = glm::translate(terrainModels[1], glm::vec3(c, 0.0f, k));
+		j = adistribution(mt);
+		buildRotation1[i] = glm::rotate(identityM, j, glm::vec3(0, 1.0f, 0));
+		buildModel1[i] = buildTranslation1[i] * buildRotation1[i] * buildScale;
+	}
+
+
+	for (int i = 0; i < 5; i++) {
+		c = xdistribution(mt);
+		k = zdistribution(mt);
+		cout << "x: " << c << "Z: " << k << endl;
+		buildTranslation1[i] = glm::translate(terrainModels[2], glm::vec3(c, 0.0f, k));
+		j = adistribution(mt);
+		buildRotation2[i] = glm::rotate(identityM, j, glm::vec3(0, 1.0f, 0));
+		buildModel2[i] = buildTranslation2[i] * buildRotation2[i] * buildScale;
+	}
+
+	for (int i = 0; i < 5; i++) {
+		c = xdistribution(mt);
+		k = zdistribution(mt);
+		cout << "x: " << c << "Z: " << k << endl;
+		buildTranslation3[i] = glm::translate(terrainModels[3], glm::vec3(c, 0.0f, k));
+		j = adistribution(mt);
+		buildRotation3[i] = glm::rotate(identityM, j, glm::vec3(0, 1.0f, 0));
+		buildModel3[i] = buildTranslation3[i] * buildRotation3[i] * buildScale;
+	}
 }
 
 void moveJet(float speed) {
@@ -406,7 +420,6 @@ void moveJet(float speed) {
 	camera.z += d;
 	look.z += d;
 	lightPosition.z += d;
-	cout << lightPosition.z << endl;
 }
 
 void loadObjects() {
@@ -416,13 +429,7 @@ void loadObjects() {
 	lightPosition=glm::vec3(0,65,65);
 }
 
-void refresh() {
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-	glBufferData(GL_ARRAY_BUFFER, NULL , NULL, GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-	glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(glm::vec3), &terrainVertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-}
+
 int main() {
 	///Make sure the size of vec3 is the same as 3 floats
 	assert(sizeof(glm::vec3) == sizeof(float) * 3);
@@ -435,7 +442,7 @@ int main() {
 	zJet = 0.0f;
 	setJet(xJet, yJet, zJet);
 	setTerrain();
-	setBuilding(59.0f, 1.0f, 79.0f);
+	setBuilding();
 	
 
 	///Load the shaders
@@ -548,16 +555,53 @@ int main() {
 			glBindVertexArray(vao[1]);
 			glDrawArrays(GL_TRIANGLES, 0, terrainVertices.size());
 		}
-		MVP = projection*view*buildModel;
-		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
-		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel));
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, buildTexture);
-		// Set our "myTextureSampler" sampler to user Texture Unit 0
-		glUniform1i(TextureID, 0);
+		for (int i = 0; i < 5; i++) {
+			MVP = projection*view*buildModel[i];
+			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel[i]));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, buildTexture);
+			// Set our "myTextureSampler" sampler to user Texture Unit 0
+			glUniform1i(TextureID, 0);
+			glBindVertexArray(vao[2]);
+			glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+		}
 
-		glBindVertexArray(vao[2]);
-		glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+		for (int i = 0; i < 5; i++) {
+			MVP = projection*view*buildModel1[i];
+			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel1[i]));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, buildTexture);
+			// Set our "myTextureSampler" sampler to user Texture Unit 0
+			glUniform1i(TextureID, 0);
+			glBindVertexArray(vao[2]);
+			glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+		}
+
+		for (int i = 0; i < 5; i++) {
+			MVP = projection*view*buildModel2[i];
+			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel2[i]));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, buildTexture);
+			// Set our "myTextureSampler" sampler to user Texture Unit 0
+			glUniform1i(TextureID, 0);
+			glBindVertexArray(vao[2]);
+			glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+		}
+	
+		for (int i = 0; i < 5; i++) {
+			MVP = projection*view*buildModel3[i];
+			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel3[i]));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, buildTexture);
+			// Set our "myTextureSampler" sampler to user Texture Unit 0
+			glUniform1i(TextureID, 0);
+			glBindVertexArray(vao[2]);
+			glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+		}
 
 		//TODO: Once you have passed all information you are ready to do the drawing
 		//glDrawElements(..........)
