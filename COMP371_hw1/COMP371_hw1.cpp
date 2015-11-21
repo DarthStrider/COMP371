@@ -53,14 +53,19 @@ glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
 float y = 0;
 float z = 0;
+GLuint ProgramID = 0;
 GLuint shader_program = 0;
-GLuint vbo[6];
+glm::vec3 lightPosition;
+GLuint vbo[9];
 GLuint vao[3];
 GLuint MVP_id = 0;
 GLuint jetTexture;
 GLuint buildTexture;
 GLuint terrainTexture;
 GLuint TextureID;
+GLuint ViewMatrixID = 0;
+GLuint ModelMatrixID = 0;
+GLuint LightID;
 bool res;
 ///Transformations
 glm::mat4 view; 
@@ -166,12 +171,16 @@ bool initialize() {
 }
 
 bool cleanUp() {
-	//Release memory e.g. vao, vbo, etc
+	glDeleteBuffers(6, vbo);
+	glDeleteBuffers(3, vao);
+	//ddlete the program
+	//glDeleteProgram(ProgramID);
 
-	// Close GL context and any other GLFW resources
+
+	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 
-	return true;
+	return 0;
 }
 
 
@@ -268,6 +277,10 @@ GLuint loadShaders(std::string vertex_shader_path, std::string fragment_shader_p
 	//If you read the vertex shader file you'll see that the same variable names are used.
 	MVP_id = glGetUniformLocation(ProgramID, "MVP");
 	TextureID = glGetUniformLocation(ProgramID, "myTextureSampler");
+	ViewMatrixID = glGetUniformLocation(ProgramID, "V");
+	ModelMatrixID = glGetUniformLocation(ProgramID, "M");
+	LightID = glGetUniformLocation(ProgramID, "lightPosition_worldspace");
+	
 	return ProgramID;
 }
 
@@ -374,7 +387,6 @@ void resize(int h) {
 			terrainModels.push_back(terrainTranslation[i]);
 		}
 	terrainModels.shrink_to_fit();
-	//terrainModels.pop_back();
 ++planes;
 }
 
@@ -393,12 +405,15 @@ void moveJet(float speed) {
 	jetModel = jetTranslation;
 	camera.z += d;
 	look.z += d;
+	lightPosition.z += d;
+	cout << lightPosition.z << endl;
 }
 
 void loadObjects() {
 	loadJet();
 	loadTerrain();
 	loadBuilding();
+	lightPosition=glm::vec3(0,65,65);
 }
 
 void refresh() {
@@ -436,13 +451,15 @@ int main() {
 	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 500.0f);
 	
 	glGenVertexArrays(3, vao);
-	glGenBuffers(6, vbo);
+	glGenBuffers(9, vbo);
 	
 	glBindVertexArray(vao[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 	glBufferData(GL_ARRAY_BUFFER, jetVertices.size() * sizeof(glm::vec3), &jetVertices[0], GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 	glBufferData(GL_ARRAY_BUFFER, jetUvs.size() * sizeof(glm::vec2), &jetUvs[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBufferData(GL_ARRAY_BUFFER, jetNormals.size() * sizeof(glm::vec3), &jetNormals[0], GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -450,31 +467,48 @@ int main() {
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindVertexArray(vao[1]);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
 	glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(glm::vec3), &terrainVertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
 	glBufferData(GL_ARRAY_BUFFER, terrainUvs.size() * sizeof(glm::vec2), &terrainUvs[0], GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
+	glBufferData(GL_ARRAY_BUFFER, terrainNormals.size() * sizeof(glm::vec3), &terrainNormals[0], GL_STATIC_DRAW);
+	
 
-	glBindVertexArray(vao[2]);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
-	glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
-	glBufferData(GL_ARRAY_BUFFER, buildUvs.size() * sizeof(glm::vec2), &buildUvs[0], GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[5]);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	
+	glBindVertexArray(vao[2]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[6]);
+	glBufferData(GL_ARRAY_BUFFER, buildVertices.size() * sizeof(glm::vec3), &buildVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[7]);
+	glBufferData(GL_ARRAY_BUFFER, buildUvs.size() * sizeof(glm::vec2), &buildUvs[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[8]);
+	glBufferData(GL_ARRAY_BUFFER, jetNormals.size() * sizeof(glm::vec3), &buildNormals[0], GL_STATIC_DRAW);
+	
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[6]);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[7]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[8]);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	
+	
 	while (!glfwWindowShouldClose(window)) {
 		lastTime = glfwGetTime();
 		// wipe the drawing surface clear
@@ -490,6 +524,8 @@ int main() {
 			look,
 			up
 			);
+		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, glm::value_ptr(view));
+		glUniform3f(LightID, lightPosition.x, lightPosition.y, lightPosition.z);
 		//cout << "Look Z: " << look.z << "Camera Z" << camera.z << endl;
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
@@ -497,13 +533,14 @@ int main() {
 		glBindTexture(GL_TEXTURE_2D, jetTexture);
 		// Set our "myTextureSampler" sampler to user Texture Unit 0
 		glUniform1i(TextureID, 0);
-
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(jetModel));
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
 
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
 			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(terrainModels[i]));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, terrainTexture);
 			glUniform1i(TextureID, 0);
@@ -513,6 +550,7 @@ int main() {
 		}
 		MVP = projection*view*buildModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModel));
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, buildTexture);
 		// Set our "myTextureSampler" sampler to user Texture Unit 0
