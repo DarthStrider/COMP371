@@ -346,11 +346,11 @@ void setJet(float xi, float yi, float zi) {
 
 void setTerrain() {
 	for (int i = 0; i < 4; i++) {
-		terrainTranslation[i] = glm::translate(identityM, glm::vec3(0, 0, (0+(planes)*170)));
+		terrainTranslation[i] = glm::translate(identityM, glm::vec3(0, 0, (planes*170)));
 		terrainModels.push_back(terrainTranslation[i]);
 		++planes;
 	}
-	terrainModels.resize(4);
+	//terrainModels.resize(4);
 	terrainModels.shrink_to_fit();
 }
 
@@ -392,7 +392,7 @@ void setBuilding() {
 		c = xdistribution(mt);
 		k = zdistribution(mt);
 		cout << "x: " << c << "Z: " << k << endl;
-		buildTranslation1[i] = glm::translate(terrainModels[2], glm::vec3(c, 0.0f, k));
+		buildTranslation2[i] = glm::translate(terrainModels[2], glm::vec3(c, 0.0f, k));
 		j = adistribution(mt);
 		buildRotation2[i] = glm::rotate(identityM, j, glm::vec3(0, 1.0f, 0));
 		buildModel2[i] = buildTranslation2[i] * buildRotation2[i] * buildScale;
