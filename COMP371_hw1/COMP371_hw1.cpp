@@ -46,9 +46,9 @@ std::vector<glm::vec3> buildNormals;
 std::vector<glm::vec3> terrainVertices;
 std::vector<glm::vec2> terrainUvs;
 std::vector<glm::vec3> terrainNormals;
-
+void checkBuilding(int i, int j);
 //Camera Vector Locations
-glm::vec3 camera = glm::vec3(0, 40, -65); // Camera is at (0,3,-5), in World Space
+glm::vec3 camera = glm::vec3(0, 30, -65); // Camera is at (0,3,-5), in World Space
 glm::vec3 look = glm::vec3(0, 0,1.0f); // and looks at the origin
 glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
@@ -65,7 +65,7 @@ GLuint buildTexture;
 GLuint buildTexture1;
 GLuint buildTexture2;
 GLuint buildTexture3;
-GLuint buildTextures[4][5];
+GLuint buildTextures[4][7];
 GLuint terrainTexture;
 GLuint TextureID;
 GLuint ViewMatrixID = 0;
@@ -82,9 +82,9 @@ glm::mat4 jetRotation = glm::mat4(1.0f);
 glm::mat4 terrainTranslation[4];
 glm::mat4 terrainScale = glm::mat4(1.0f);
 
-glm::mat4 buildModels[4][5];
-glm::mat4 buildTranslations[4][5];
-glm::mat4 buildRotations[4][5];
+glm::mat4 buildModels[4][7];
+glm::mat4 buildTranslations[4][7];
+glm::mat4 buildRotations[4][7];
 
 glm::mat4 buildScale = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
@@ -102,11 +102,6 @@ float currentTime;
 float deltaTime;
 int planes = 0;
 int place = 0;
-unsigned char header[54];
-unsigned int dataPos;
-unsigned int width, height;
-unsigned int imageSize;
-unsigned char * data;
 std::random_device rd;
 std::mt19937 mt(rd());
 std::uniform_real_distribution<double> xdistribution(-120.0, 120.0);
@@ -349,6 +344,35 @@ void setTerrain() {
 	terrainModels.shrink_to_fit();
 }
 
+void redoBuidlings(int i) {
+	float c, k, r;
+	for (int j = 0; j < 7; j++) {
+		c = xdistribution(mt);
+		k = zdistribution(mt);
+		buildTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, 0.0f, k));
+		r = adistribution(mt);
+		buildRotations[i][j] = glm::rotate(identityM, r, glm::vec3(0, 1.0f, 0));
+		buildModels[i][j] = buildTranslations[i][j] * buildRotations[i][j] * buildScale;
+		if (j>0) {
+			checkBuilding(i, j);
+		}
+		h = hdistribution(mt);
+		if (h == 0) {
+			buildTextures[i][j] = buildTexture;
+		}
+		if (h == 1) {
+			buildTextures[i][j] = buildTexture1;
+		}
+		if (h == 2) {
+			buildTextures[i][j] = buildTexture2;
+		}
+		if (h == 3) {
+			buildTextures[i][j] = buildTexture3;
+		}
+	}
+
+}
+
 void resize(int h) {
 	terrainModels.clear();
 	terrainTranslation[h] = glm::translate(identityM, glm::vec3(0, 0, (0 + (planes * 425))));
@@ -356,7 +380,30 @@ void resize(int h) {
 			terrainModels.push_back(terrainTranslation[i]);
 		}
 	terrainModels.shrink_to_fit();
+	redoBuidlings(h);
 ++planes;
+}
+
+
+void checkBuilding(int i, int j) {
+	float x= buildModels[i][j][3][0];
+	float z = buildModels[i][j][3][2];
+	for (int t = 0; t< j; t++) {
+		float xCheck = buildModels[i][t][3][0];
+		float zCheck = buildModels[i][t][3][2];
+		if (abs(x - xCheck) > 10 && abs(z - zCheck) > 10) {
+			
+		}
+		else {
+			cout << i << j << endl;
+			float d, r;
+			d = xdistribution(mt);
+			r = zdistribution(mt);
+			buildTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(d, 0.0f, r));
+			buildModels[i][j] = buildTranslations[i][j] * buildRotations[i][j] * buildScale;
+			checkBuilding(i, j);
+		}
+	}
 }
 
 void setBuilding() {
@@ -365,15 +412,17 @@ void setBuilding() {
 	int h;
 
 	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 5; j++) {
+		for (int j = 0; j < 7; j++) {
 			c = xdistribution(mt);
 			k = zdistribution(mt);
 			buildTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, 0.0f, k));
 			r = adistribution(mt);
 			buildRotations[i][j] = glm::rotate(identityM, r, glm::vec3(0, 1.0f, 0));
 			buildModels[i][j] = buildTranslations[i][j] * buildRotations[i][j] * buildScale;
+			if(j>0){
+			checkBuilding(i, j);
+			}
 			h = hdistribution(mt);
-			cout << h << endl;
 			if (h == 0) {
 				buildTextures[i][j] = buildTexture;
 			}
@@ -514,12 +563,10 @@ int main() {
 			);
 		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, glm::value_ptr(view));
 		glUniform3f(LightID, lightPosition.x, lightPosition.y, lightPosition.z);
-		//cout << "Look Z: " << look.z << "Camera Z" << camera.z << endl;
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, jetTexture);
-		// Set our "myTextureSampler" sampler to user Texture Unit 0
 		glUniform1i(TextureID, 0);
 		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(jetModel));
 		glBindVertexArray(vao[0]);
@@ -538,13 +585,12 @@ int main() {
 		}
 
 		for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 5; j++) {
+			for (int j = 0; j < 7; j++) {
 				MVP = projection*view*buildModels[i][j];
 				glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 				glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModels[i][j]));
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, buildTextures[i][j]);
-				// Set our "myTextureSampler" sampler to user Texture Unit 0
 				glUniform1i(TextureID, 0);
 				glBindVertexArray(vao[2]);
 				glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
@@ -576,6 +622,3 @@ int main() {
 	cleanUp();
 	return 0;
 }
-
-
-
