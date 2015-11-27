@@ -10,8 +10,7 @@ in vec3 LightDirection_cameraspace;
 uniform mat4 MV;
 uniform vec3 LightPosition_worldspace;
 
-vec3 light;
-vec3 text;
+
 // Ouput data
 out vec3 color;
 
@@ -22,11 +21,11 @@ void main(){
 
 //colour of the light and the power
 vec3 LightColor = vec3(1.0,1.0,1.0);
-float LightPower = 100.0f;
+float LightPower = 10.0f;
     // colour of the material
-    vec3 MaterialDiffuseColor = vec3(0.2,0.2,0.2);
-	vec3 MaterialAmbientColor = vec3(0.2,0.2,0.2) * MaterialDiffuseColor;
-	vec3 MaterialSpecularColor = vec3(0.8,0.8,0.8);
+    vec3 MaterialDiffuseColor = vec3(0.7,0.7,0.7);
+	vec3 MaterialAmbientColor = vec3(0.1,0.1,0.1) * MaterialDiffuseColor;
+	vec3 MaterialSpecularColor = vec3(0.3,0.3,0.3);
 	
     // Distance to the light
 	float distance = length( LightPosition_worldspace - Position_worldspace );
@@ -52,8 +51,8 @@ float LightPower = 100.0f;
 	//  - Looking elsewhere -> < 1
 	float cosAlpha = clamp( dot( E,R ), 0,1 );
 
-    text=texture2D( myTextureSampler, UV ).rgb;
-    light=// Ambient : simulates indirect lighting
+   vec3 text= texture( myTextureSampler, UV ).rgb;
+    vec3 light=// Ambient : simulates indirect lighting
 		MaterialAmbientColor +
 		// Diffuse : "color" of the object
 		MaterialDiffuseColor * LightColor * LightPower * cosTheta / (distance*distance) +

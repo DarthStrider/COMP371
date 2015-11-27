@@ -161,7 +161,7 @@ void window_size_callback(GLFWwindow* window, int width, int height)
 {
 	cout << height;
 	float aspect = (float)width / height;
-	projection = glm::perspective(45.0f, aspect, 0.1f, 300.0f);
+	projection = glm::perspective(60.0f, aspect, 0.1f, 400.0f);
 	glViewport(0, 0, width, height);
 }
 
@@ -484,7 +484,7 @@ void loadObjects() {
 	loadSkyBox();
 	loadSun();
 	loadShrub();
-	lightPosition = glm::vec3(xSun, ySun, zSun);
+	lightPosition = glm::vec3(xJet, yJet, zJet);
 	xJet = 0;
 	yJet = 32.0f;
 	zJet = 0.0f;
@@ -510,7 +510,7 @@ int main() {
 	TextureID = glGetUniformLocation(shader, "myTextureSampler");
 	ViewMatrixID = glGetUniformLocation(shader, "V");
 	ModelMatrixID = glGetUniformLocation(shader, "M");
-	LightID = glGetUniformLocation(shader, "lightPosition_worldspace");
+	LightID = glGetUniformLocation(shader, "LightPosition_worldspace");
 
 
 	view = glm::lookAt(
@@ -631,6 +631,7 @@ int main() {
 			look,
 			up
 			);
+		//lightPosition = glm::vec3(xSun, ySun, zSun);
 		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, glm::value_ptr(view));
 		glUniform3f(LightID, lightPosition.x, lightPosition.y, lightPosition.z);
 
@@ -643,7 +644,6 @@ int main() {
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
 
-
 		MVP = projection*view*skyboxModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -652,6 +652,7 @@ int main() {
 		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(skyboxModel));
 		glBindVertexArray(vao[3]);
 		glDrawArrays(GL_TRIANGLES, 0, skyboxVertices.size());
+
 
 		MVP = projection*view*sunModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
@@ -662,13 +663,15 @@ int main() {
 		glBindVertexArray(vao[4]);
 		glDrawArrays(GL_TRIANGLES, 0, sunVertices.size());
 
+
+
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
 			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(terrainModels[i]));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, terrainTexture);
-			glUniform1i(TextureID, 0);
+			//glUniform1i(TextureID, 0);
 
 			glBindVertexArray(vao[1]);
 			glDrawArrays(GL_TRIANGLES, 0, terrainVertices.size());
