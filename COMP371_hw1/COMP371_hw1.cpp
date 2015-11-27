@@ -26,6 +26,7 @@
 #include <algorithm>
 #include "objloader.hpp"
 #include "texture.hpp"
+#include "shader.hpp"
 using namespace std;
 
 #define M_PI        3.14159265358979323846264338327950288   /* pi */
@@ -46,6 +47,19 @@ std::vector<glm::vec3> buildNormals;
 std::vector<glm::vec3> terrainVertices;
 std::vector<glm::vec2> terrainUvs;
 std::vector<glm::vec3> terrainNormals;
+
+std::vector<glm::vec3> skyboxVertices;
+std::vector<glm::vec2> skyboxUvs;
+std::vector<glm::vec3> skyboxNormals;
+
+std::vector<glm::vec3> sunVertices;
+std::vector<glm::vec2> sunUvs;
+std::vector<glm::vec3> sunNormals;
+
+std::vector<glm::vec3> shrubVertices;
+std::vector<glm::vec2> shrubUvs;
+std::vector<glm::vec3> shrubNormals;
+void checkShrub(int i, int j);
 void checkBuilding(int i, int j);
 //Camera Vector Locations
 glm::vec3 camera = glm::vec3(0, 30, -65); // Camera is at (0,3,-5), in World Space
@@ -54,13 +68,15 @@ glm::vec3 up = glm::vec3(0, 1, 0);  // Head is up
 float x = 0;
 float y = 0;
 float z = 0;
-GLuint ProgramID = 0;
-GLuint shader_program = 0;
+GLuint shader= 0;
 glm::vec3 lightPosition;
-GLuint vbo[9];
-GLuint vao[3];
+GLuint vbo[15];
+GLuint vao[5];
 GLuint MVP_id = 0;
 GLuint jetTexture;
+GLuint skyboxTexture;
+GLuint sunTexture;
+GLuint shrubTexture;
 GLuint buildTexture;
 GLuint buildTexture1;
 GLuint buildTexture2;
@@ -86,6 +102,17 @@ glm::mat4 buildModels[4][7];
 glm::mat4 buildTranslations[4][7];
 glm::mat4 buildRotations[4][7];
 
+glm::mat4 shrubModels[4][10];
+glm::mat4 shrubTranslations[4][10];
+glm::mat4 shrubScale;
+glm::mat4 skyboxModel;
+glm::mat4 skyboxScale;
+glm::mat4 skyboxTranslation;
+
+glm::mat4 sunModel;
+glm::mat4 sunScale;
+glm::mat4 sunTranslation;
+
 glm::mat4 buildScale = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
 vector <glm::mat4> terrainModels;
@@ -102,6 +129,11 @@ float currentTime;
 float deltaTime;
 int planes = 0;
 int place = 0;
+float zSkybox;
+float zSun;
+float ySun;
+float xSun;
+float yShrub;
 std::random_device rd;
 std::mt19937 mt(rd());
 std::uniform_real_distribution<double> xdistribution(-120.0, 120.0);
@@ -177,121 +209,14 @@ bool initialize() {
 }
 
 bool cleanUp() {
-	glDeleteBuffers(6, vbo);
-	glDeleteBuffers(3, vao);
-	//ddlete the program
-	//glDeleteProgram(ProgramID);
-
-
+	glDeleteBuffers(15, vbo);
+	glDeleteBuffers(5, vao);
+	//delete the program
+	//glDeleteProgram(shader);
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
-
 	return 0;
 }
-
-
-
-GLuint loadShaders(std::string vertex_shader_path, std::string fragment_shader_path)	{
-	// Create the shaders
-	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-	GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
-
-	// Read the Vertex Shader code from the file
-	std::string VertexShaderCode;
-	std::ifstream VertexShaderStream(vertex_shader_path, std::ios::in);
-	if (VertexShaderStream.is_open()) {
-		std::string Line = "";
-		while (getline(VertexShaderStream, Line))
-			VertexShaderCode += "\n" + Line;
-		VertexShaderStream.close();
-	}
-	else {
-		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_shader_path.c_str());
-		getchar();
-		exit(-1);
-	}
-
-	// Read the Fragment Shader code from the file
-	std::string FragmentShaderCode;
-	std::ifstream FragmentShaderStream(fragment_shader_path, std::ios::in);
-	if (FragmentShaderStream.is_open()) {
-		std::string Line = "";
-		while (getline(FragmentShaderStream, Line))
-			FragmentShaderCode += "\n" + Line;
-		FragmentShaderStream.close();
-	}
-
-	GLint Result = GL_FALSE;
-	int InfoLogLength;
-
-	// Compile Vertex Shader
-	printf("Compiling shader : %s\n", vertex_shader_path.c_str());
-	char const * VertexSourcePointer = VertexShaderCode.c_str();
-	glShaderSource(VertexShaderID, 1, &VertexSourcePointer, nullptr);
-	glCompileShader(VertexShaderID);
-
-	// Check Vertex Shader
-	glGetShaderiv(VertexShaderID, GL_COMPILE_STATUS, &Result);
-	glGetShaderiv(VertexShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if (InfoLogLength > 0) {
-		std::vector<char> VertexShaderErrorMessage(InfoLogLength + 1);
-		glGetShaderInfoLog(VertexShaderID, InfoLogLength, nullptr, &VertexShaderErrorMessage[0]);
-		printf("%s\n", &VertexShaderErrorMessage[0]);
-	}
-
-	// Compile Fragment Shader
-	printf("Compiling shader : %s\n", fragment_shader_path.c_str());
-	char const * FragmentSourcePointer = FragmentShaderCode.c_str();
-	glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer, nullptr);
-	glCompileShader(FragmentShaderID);
-
-	// Check Fragment Shader
-	glGetShaderiv(FragmentShaderID, GL_COMPILE_STATUS, &Result);
-	glGetShaderiv(FragmentShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if (InfoLogLength > 0) {
-		std::vector<char> FragmentShaderErrorMessage(InfoLogLength + 1);
-		glGetShaderInfoLog(FragmentShaderID, InfoLogLength, nullptr, &FragmentShaderErrorMessage[0]);
-		printf("%s\n", &FragmentShaderErrorMessage[0]);
-	}
-
-	// Link the program
-	printf("Linking program\n");
-	GLuint ProgramID = glCreateProgram();
-	glAttachShader(ProgramID, VertexShaderID);
-	glAttachShader(ProgramID, FragmentShaderID);
-	
-	glBindAttribLocation(ProgramID, 0, "in_Position");
-	//Uncomment below for extra credit. You should also uncomment the variable of the same name 
-	//appearing in the vertex shader.
-	//glBindAttribLocation(ProgramID, 1, "in_Color");
-
-	glLinkProgram(ProgramID);
-
-	// Check the program
-	glGetProgramiv(ProgramID, GL_LINK_STATUS, &Result);
-	glGetProgramiv(ProgramID, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if (InfoLogLength > 0) {
-		std::vector<char> ProgramErrorMessage(InfoLogLength + 1);
-		glGetProgramInfoLog(ProgramID, InfoLogLength, nullptr, &ProgramErrorMessage[0]);
-		printf("%s\n", &ProgramErrorMessage[0]);
-	}
-
-	glDeleteShader(VertexShaderID);
-	glDeleteShader(FragmentShaderID);
-
-	//The three variables below hold the id of each of the variables in the shader
-	//If you read the vertex shader file you'll see that the same variable names are used.
-	MVP_id = glGetUniformLocation(ProgramID, "MVP");
-	TextureID = glGetUniformLocation(ProgramID, "myTextureSampler");
-	ViewMatrixID = glGetUniformLocation(ProgramID, "V");
-	ModelMatrixID = glGetUniformLocation(ProgramID, "M");
-	LightID = glGetUniformLocation(ProgramID, "lightPosition_worldspace");
-	
-	return ProgramID;
-}
-
-
-
 
 void loadJet() 
 {
@@ -306,7 +231,7 @@ void loadJet()
 void loadTerrain()
 {
 	res = loadOBJ("plane3.obj", terrainVertices, terrainUvs, terrainNormals);
-	terrainTexture= loadBMP_custom("grass.bmp");
+	terrainTexture= loadBMP_custom("snow.bmp");
 	if (res == false) {
 		cout << "Terrain could not be loaded" << endl;
 		exit(1);
@@ -315,7 +240,7 @@ void loadTerrain()
 
 void loadBuilding()
 {
-	res = loadOBJ("Cottage2.obj", buildVertices, buildUvs, buildNormals);
+	res = loadOBJ("cottage2.obj", buildVertices, buildUvs, buildNormals);
 	buildTexture = loadBMP_custom("cottage.bmp");
 	buildTexture1 = loadBMP_custom("cottage2.bmp");
 	buildTexture2= loadBMP_custom("cottage3.bmp");
@@ -326,7 +251,32 @@ void loadBuilding()
 	}
 }
 
+void loadSkyBox() {
+	res = loadOBJ("cube.obj", skyboxVertices, skyboxUvs, skyboxNormals);
+	skyboxTexture = loadBMP_custom("uvtemplate4.bmp");
+	if (res == false) {
+		cout << "Skybox could not be loaded" << endl;
+		exit(1);
+	}
+}
 
+void loadShrub() {
+	res = loadOBJ("Sphere.obj", shrubVertices, shrubUvs, shrubNormals);
+	shrubTexture = loadBMP_custom("shrub.bmp");
+	if (res == false) {
+		cout << "Shrub could not be loaded" << endl;
+		exit(1);
+	}
+}
+
+void loadSun() {
+	res = loadOBJ("Sphere.obj", sunVertices, sunUvs, sunNormals);
+	sunTexture = loadBMP_custom("yellow.bmp");
+	if (res == false) {
+		cout << "Sun could not be loaded" << endl;
+		exit(1);
+	}
+}
 
 void setJet(float xi, float yi, float zi) {
 	glm::mat4 rot;
@@ -342,6 +292,21 @@ void setTerrain() {
 	}
 	//terrainModels.resize(4);
 	terrainModels.shrink_to_fit();
+}
+
+void setSkybox() {
+	skyboxScale = glm::scale(identityM, glm::vec3(140.0f, 100.0f, 300.0f));
+	skyboxTranslation = glm::translate(identityM, glm::vec3(0, 99, 0));
+	skyboxModel = skyboxTranslation * skyboxScale;
+}
+
+void setSun() {
+	xSun = 100;
+	zSun = 297;
+	ySun = 50;
+	sunScale = glm::scale(identityM, glm::vec3(0.5f, 0.5f, 0.5f));
+	sunTranslation = glm::translate(identityM, glm::vec3(xSun, ySun, zSun));
+	sunModel = sunTranslation * sunScale;
 }
 
 void redoBuidlings(int i) {
@@ -373,6 +338,20 @@ void redoBuidlings(int i) {
 
 }
 
+void redoShrubs(int i) {
+	float c, k;
+	for (int j = 0; j < 10; j++) {
+		c = xdistribution(mt);
+		k = zdistribution(mt);
+		shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, yShrub, k));
+		shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
+		if (j>0) {
+			checkShrub(i, j);
+		}
+	}
+
+}
+
 void resize(int h) {
 	terrainModels.clear();
 	terrainTranslation[h] = glm::translate(identityM, glm::vec3(0, 0, (0 + (planes * 425))));
@@ -381,6 +360,7 @@ void resize(int h) {
 		}
 	terrainModels.shrink_to_fit();
 	redoBuidlings(h);
+	redoShrubs(h);
 ++planes;
 }
 
@@ -391,7 +371,7 @@ void checkBuilding(int i, int j) {
 	for (int t = 0; t< j; t++) {
 		float xCheck = buildModels[i][t][3][0];
 		float zCheck = buildModels[i][t][3][2];
-		if (abs(x - xCheck) > 10 && abs(z - zCheck) > 10) {
+		if (abs(x - xCheck) > 11 && abs(z - zCheck) > 11) {
 			
 		}
 		else {
@@ -439,6 +419,45 @@ void setBuilding() {
 	}
 }
 
+void checkShrub(int i, int j) {
+	float x = shrubModels[i][j][3][0];
+	float z = shrubModels[i][j][3][2];
+	for (int t = 0; t< 7; t++) {
+		float xCheck = buildModels[i][t][3][0];
+		float zCheck = buildModels[i][t][3][2];
+		if (abs(x - xCheck) > 8 && abs(z - zCheck) > 8) {
+
+		}
+		else {
+			cout << i << j << endl;
+			float d, r;
+			d = xdistribution(mt);
+			r = zdistribution(mt);
+			shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(d, yShrub, r));
+			shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
+			checkShrub(i, j);
+		}
+	}
+}
+
+void setShrub() {
+	yShrub = -2.0f;
+	shrubScale = glm::scale(identityM, glm::vec3(0.4f, 0.4f, 0.4f));
+	float c, k;
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 10; j++) {
+			c = xdistribution(mt);
+			k = zdistribution(mt);
+			shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, yShrub, k));
+			shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
+			if (j>0) {
+				checkShrub(i,j);
+			}
+			
+		}
+	}
+}
+
 void moveJet(float speed) {
 	currentTime = glfwGetTime();
 	deltaTime = currentTime - lastTime;
@@ -447,16 +466,34 @@ void moveJet(float speed) {
 	zJet += d;
 	jetTranslation = glm::translate(identityM, glm::vec3(xJet, yJet,zJet));
 	jetModel = jetTranslation;
+	zSkybox += d;
+	skyboxTranslation= glm::translate(identityM, glm::vec3(0, 99, zSkybox));
+	skyboxModel = skyboxTranslation * skyboxScale;
 	camera.z += d;
 	look.z += d;
 	lightPosition.z += d;
+	zSun += d;
+	sunTranslation = glm::translate(identityM, glm::vec3(xSun, ySun, zSun));
+	sunModel = sunTranslation * sunScale;
 }
 
 void loadObjects() {
 	loadJet();
 	loadTerrain();
 	loadBuilding();
-	lightPosition=glm::vec3(0,65,65);
+	loadSkyBox();
+	loadSun();
+	loadShrub();
+	lightPosition = glm::vec3(xSun, ySun, zSun);
+	xJet = 0;
+	yJet = 32.0f;
+	zJet = 0.0f;
+	setJet(xJet, yJet, zJet);
+	setTerrain();
+	setBuilding();
+	setSkybox();
+	setSun();
+	setShrub();
 }
 
 
@@ -467,16 +504,14 @@ int main() {
 
 	initialize();
 	loadObjects();
-	xJet = 0;
-	yJet = 32.0f;
-	zJet = 0.0f;
-	setJet(xJet, yJet, zJet);
-	setTerrain();
-	setBuilding();
-	
-
 	///Load the shaders
-	shader_program = loadShaders("COMP371_hw1.vs", "COMP371_hw1.fs");
+	shader= LoadShaders("COMP371_hw1.vs", "COMP371_hw1.fs");
+	MVP_id = glGetUniformLocation(shader, "MVP");
+	TextureID = glGetUniformLocation(shader, "myTextureSampler");
+	ViewMatrixID = glGetUniformLocation(shader, "V");
+	ModelMatrixID = glGetUniformLocation(shader, "M");
+	LightID = glGetUniformLocation(shader, "lightPosition_worldspace");
+
 
 	view = glm::lookAt(
 		camera,
@@ -487,8 +522,8 @@ int main() {
 	//create the projection matrix
 	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 500.0f);
 	
-	glGenVertexArrays(3, vao);
-	glGenBuffers(9, vbo);
+	glGenVertexArrays(5, vao);
+	glGenBuffers(15, vbo);
 	
 	glBindVertexArray(vao[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -544,15 +579,50 @@ int main() {
 	glEnableVertexAttribArray(2);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[8]);
 	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-	
-	
+
+	glBindVertexArray(vao[3]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[9]);
+	glBufferData(GL_ARRAY_BUFFER, skyboxVertices.size() * sizeof(glm::vec3), &skyboxVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[10]);
+	glBufferData(GL_ARRAY_BUFFER, skyboxUvs.size() * sizeof(glm::vec2), &skyboxUvs[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[11]);
+	glBufferData(GL_ARRAY_BUFFER, skyboxNormals.size() * sizeof(glm::vec3), &skyboxNormals[0], GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[9]);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[10]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[11]);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	glBindVertexArray(vao[4]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[12]);
+	glBufferData(GL_ARRAY_BUFFER, sunVertices.size() * sizeof(glm::vec3), &sunVertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[13]);
+	glBufferData(GL_ARRAY_BUFFER, sunUvs.size() * sizeof(glm::vec2), &sunUvs[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[14]);
+	glBufferData(GL_ARRAY_BUFFER, sunNormals.size() * sizeof(glm::vec3), &sunNormals[0], GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[12]);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[13]);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[14]);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
 	while (!glfwWindowShouldClose(window)) {
 		lastTime = glfwGetTime();
 		// wipe the drawing surface clear
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPointSize(point_size);
 		
-		glUseProgram(shader_program);
+		glUseProgram(shader);
 
 		lastTime = glfwGetTime();
 		moveJet(30000.0f);
@@ -563,6 +633,7 @@ int main() {
 			);
 		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, glm::value_ptr(view));
 		glUniform3f(LightID, lightPosition.x, lightPosition.y, lightPosition.z);
+
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 		glActiveTexture(GL_TEXTURE0);
@@ -571,6 +642,25 @@ int main() {
 		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(jetModel));
 		glBindVertexArray(vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, jetVertices.size());
+
+
+		MVP = projection*view*skyboxModel;
+		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, skyboxTexture);
+		glUniform1i(TextureID, 0);
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(skyboxModel));
+		glBindVertexArray(vao[3]);
+		glDrawArrays(GL_TRIANGLES, 0, skyboxVertices.size());
+
+		MVP = projection*view*sunModel;
+		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, sunTexture);
+		glUniform1i(TextureID, 0);
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(sunModel));
+		glBindVertexArray(vao[4]);
+		glDrawArrays(GL_TRIANGLES, 0, sunVertices.size());
 
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
@@ -594,6 +684,19 @@ int main() {
 				glUniform1i(TextureID, 0);
 				glBindVertexArray(vao[2]);
 				glDrawArrays(GL_TRIANGLES, 0, buildVertices.size());
+			}
+		}
+
+		for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < 10; j++) {
+				MVP = projection*view*shrubModels[i][j];
+				glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+				glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(shrubModels[i][j]));
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, shrubTexture);
+				glUniform1i(TextureID, 0);
+				glBindVertexArray(vao[4]);
+				glDrawArrays(GL_TRIANGLES, 0, shrubVertices.size());
 			}
 		}
 		

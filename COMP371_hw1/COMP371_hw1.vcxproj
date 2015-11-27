@@ -154,6 +154,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="objloader.hpp" />
+    <ClInclude Include="shader.hpp" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="tangentspace.hpp" />
     <ClInclude Include="targetver.h" />
@@ -162,6 +163,7 @@
   <ItemGroup>
     <ClCompile Include="COMP371_hw1.cpp" />
     <ClCompile Include="objloader.cpp" />
+    <ClCompile Include="shader.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
