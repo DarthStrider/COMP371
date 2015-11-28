@@ -64,5 +64,11 @@
     <None Include="COMP371_hw1.vs">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="Particle.fragmentshader">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="Particle.vertexshader">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

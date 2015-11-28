@@ -176,6 +176,8 @@
   <ItemGroup>
     <None Include="COMP371_hw1.fs" />
     <None Include="COMP371_hw1.vs" />
+    <None Include="Particle.fragmentshader" />
+    <None Include="Particle.vertexshader" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

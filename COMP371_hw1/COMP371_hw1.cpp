@@ -12,7 +12,7 @@
 #include "gtc/matrix_transform.hpp"
 #include "gtc/type_ptr.hpp"
 #include "gtc/constants.hpp"
-
+#include "gtx/norm.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,10 +52,6 @@ std::vector<glm::vec3> skyboxVertices;
 std::vector<glm::vec2> skyboxUvs;
 std::vector<glm::vec3> skyboxNormals;
 
-std::vector<glm::vec3> sunVertices;
-std::vector<glm::vec2> sunUvs;
-std::vector<glm::vec3> sunNormals;
-
 std::vector<glm::vec3> shrubVertices;
 std::vector<glm::vec2> shrubUvs;
 std::vector<glm::vec3> shrubNormals;
@@ -87,6 +83,22 @@ GLuint TextureID;
 GLuint ViewMatrixID = 0;
 GLuint ModelMatrixID = 0;
 GLuint LightID;
+
+//particle initilization
+GLuint programID;
+GLuint CameraRight_worldspace_ID;
+GLuint CameraUp_worldspace_ID;
+GLuint ViewProjMatrixID;
+GLuint pTextureID;
+GLuint VertexID;
+GLuint VertexArrayID;
+GLuint sTexture;
+GLuint billboard_vertex_buffer;
+GLuint particles_position_buffer;
+GLuint particles_color_buffer;
+glm::vec3 CameraPosition;
+glm::mat4 ViewProjectionMatrix;
+
 bool res;
 ///Transformations
 glm::mat4 view; 
@@ -98,9 +110,9 @@ glm::mat4 jetRotation = glm::mat4(1.0f);
 glm::mat4 terrainTranslation[4];
 glm::mat4 terrainScale = glm::mat4(1.0f);
 
-glm::mat4 buildModels[4][7];
-glm::mat4 buildTranslations[4][7];
-glm::mat4 buildRotations[4][7];
+glm::mat4 buildModels[4][8];
+glm::mat4 buildTranslations[4][8];
+glm::mat4 buildRotations[4][8];
 
 glm::mat4 shrubModels[4][10];
 glm::mat4 shrubTranslations[4][10];
@@ -108,10 +120,6 @@ glm::mat4 shrubScale;
 glm::mat4 skyboxModel;
 glm::mat4 skyboxScale;
 glm::mat4 skyboxTranslation;
-
-glm::mat4 sunModel;
-glm::mat4 sunScale;
-glm::mat4 sunTranslation;
 
 glm::mat4 buildScale = glm::mat4(1.0f);
 glm::mat4 jetModel = glm::mat4(1.0f);
@@ -130,10 +138,9 @@ float deltaTime;
 int planes = 0;
 int place = 0;
 float zSkybox;
-float zSun;
-float ySun;
-float xSun;
 float yShrub;
+float snowMov=15;
+
 std::random_device rd;
 std::mt19937 mt(rd());
 std::uniform_real_distribution<double> xdistribution(-120.0, 120.0);
@@ -142,6 +149,56 @@ std::uniform_real_distribution<double> adistribution(0.0, 360.0);
 std::uniform_real_distribution<double> hdistribution(0, 3);
 ///Change the size of the rendered points
 GLfloat point_size = 1.0f;
+
+static const GLfloat g_vertex_buffer_data[] = {
+	-0.5f, -0.5f, 0.0f,
+	0.5f, -0.5f, 0.0f,
+	-0.5f, 0.5f, 0.0f,
+	0.5f, 0.5f, 0.0f,
+};
+
+
+
+struct Particle {
+	glm::vec3 pos, speed;
+	unsigned char r, g, b, a; // Color
+	float size, angle, weight;
+	float life; // Remaining life of the particle. if <0 : dead and unused.
+	float cameradistance; // *Squared* distance to the camera. if dead : -1.0f
+
+	bool operator<(const Particle& that) const {
+		// Sort in reverse order : far particles drawn first.
+		return this->cameradistance > that.cameradistance;
+	}
+};
+const int MaxParticles = 4000;
+Particle ParticlesContainer[MaxParticles];
+int LastUsedParticle = 0;
+
+int FindUnusedParticle() {
+
+	for (int i = LastUsedParticle; i<MaxParticles; i++) {
+		if (ParticlesContainer[i].life < 0) {
+			LastUsedParticle = i;
+			return i;
+		}
+	}
+
+	for (int i = 0; i<LastUsedParticle; i++) {
+		if (ParticlesContainer[i].life < 0) {
+			LastUsedParticle = i;
+			return i;
+		}
+	}
+
+	return 0; // All particles are taken, override the first one
+}
+
+
+void SortParticles() {
+	std::sort(&ParticlesContainer[0], &ParticlesContainer[MaxParticles]);
+}
+
 
 void keyPressed(GLFWwindow *_window, int key, int scancode, int action, int mods) {
 	if (key == GLFW_KEY_KP_SUBTRACT) {
@@ -159,9 +216,8 @@ void keyPressed(GLFWwindow *_window, int key, int scancode, int action, int mods
 }
 void window_size_callback(GLFWwindow* window, int width, int height)
 {
-	cout << height;
 	float aspect = (float)width / height;
-	projection = glm::perspective(60.0f, aspect, 0.1f, 400.0f);
+	projection = glm::perspective(45.0f, aspect, 0.1f, 500.0f);
 	glViewport(0, 0, width, height);
 }
 
@@ -269,15 +325,6 @@ void loadShrub() {
 	}
 }
 
-void loadSun() {
-	res = loadOBJ("Sphere.obj", sunVertices, sunUvs, sunNormals);
-	sunTexture = loadBMP_custom("yellow.bmp");
-	if (res == false) {
-		cout << "Sun could not be loaded" << endl;
-		exit(1);
-	}
-}
-
 void setJet(float xi, float yi, float zi) {
 	glm::mat4 rot;
 	jetTranslation = glm::translate(identityM, glm::vec3(xi, yi, zi));
@@ -300,18 +347,9 @@ void setSkybox() {
 	skyboxModel = skyboxTranslation * skyboxScale;
 }
 
-void setSun() {
-	xSun = 100;
-	zSun = 297;
-	ySun = 50;
-	sunScale = glm::scale(identityM, glm::vec3(0.5f, 0.5f, 0.5f));
-	sunTranslation = glm::translate(identityM, glm::vec3(xSun, ySun, zSun));
-	sunModel = sunTranslation * sunScale;
-}
-
 void redoBuidlings(int i) {
 	float c, k, r;
-	for (int j = 0; j < 7; j++) {
+	for (int j = 0; j < 8; j++) {
 		c = xdistribution(mt);
 		k = zdistribution(mt);
 		buildTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, 0.0f, k));
@@ -338,19 +376,6 @@ void redoBuidlings(int i) {
 
 }
 
-void redoShrubs(int i) {
-	float c, k;
-	for (int j = 0; j < 10; j++) {
-		c = xdistribution(mt);
-		k = zdistribution(mt);
-		shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, yShrub, k));
-		shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
-		if (j>0) {
-			checkShrub(i, j);
-		}
-	}
-
-}
 
 void resize(int h) {
 	terrainModels.clear();
@@ -360,7 +385,6 @@ void resize(int h) {
 		}
 	terrainModels.shrink_to_fit();
 	redoBuidlings(h);
-	redoShrubs(h);
 ++planes;
 }
 
@@ -371,7 +395,7 @@ void checkBuilding(int i, int j) {
 	for (int t = 0; t< j; t++) {
 		float xCheck = buildModels[i][t][3][0];
 		float zCheck = buildModels[i][t][3][2];
-		if (abs(x - xCheck) > 11 && abs(z - zCheck) > 11) {
+		if (abs(x - xCheck) > 10 && abs(z - zCheck) > 10) {
 			
 		}
 		else {
@@ -392,7 +416,7 @@ void setBuilding() {
 	int h;
 
 	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 7; j++) {
+		for (int j = 0; j < 8; j++) {
 			c = xdistribution(mt);
 			k = zdistribution(mt);
 			buildTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, 0.0f, k));
@@ -419,45 +443,6 @@ void setBuilding() {
 	}
 }
 
-void checkShrub(int i, int j) {
-	float x = shrubModels[i][j][3][0];
-	float z = shrubModels[i][j][3][2];
-	for (int t = 0; t< 7; t++) {
-		float xCheck = buildModels[i][t][3][0];
-		float zCheck = buildModels[i][t][3][2];
-		if (abs(x - xCheck) > 8 && abs(z - zCheck) > 8) {
-
-		}
-		else {
-			cout << i << j << endl;
-			float d, r;
-			d = xdistribution(mt);
-			r = zdistribution(mt);
-			shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(d, yShrub, r));
-			shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
-			checkShrub(i, j);
-		}
-	}
-}
-
-void setShrub() {
-	yShrub = -2.0f;
-	shrubScale = glm::scale(identityM, glm::vec3(0.4f, 0.4f, 0.4f));
-	float c, k;
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 10; j++) {
-			c = xdistribution(mt);
-			k = zdistribution(mt);
-			shrubTranslations[i][j] = glm::translate(terrainModels[i], glm::vec3(c, yShrub, k));
-			shrubModels[i][j] = shrubTranslations[i][j] * shrubScale;
-			if (j>0) {
-				checkShrub(i,j);
-			}
-			
-		}
-	}
-}
-
 void moveJet(float speed) {
 	currentTime = glfwGetTime();
 	deltaTime = currentTime - lastTime;
@@ -472,9 +457,8 @@ void moveJet(float speed) {
 	camera.z += d;
 	look.z += d;
 	lightPosition.z += d;
-	zSun += d;
-	sunTranslation = glm::translate(identityM, glm::vec3(xSun, ySun, zSun));
-	sunModel = sunTranslation * sunScale;
+
+	snowMov += d;
 }
 
 void loadObjects() {
@@ -482,9 +466,7 @@ void loadObjects() {
 	loadTerrain();
 	loadBuilding();
 	loadSkyBox();
-	loadSun();
-	loadShrub();
-	lightPosition = glm::vec3(xJet, yJet, zJet);
+	sTexture = loadDDS("particle.DDS");
 	xJet = 0;
 	yJet = 32.0f;
 	zJet = 0.0f;
@@ -492,8 +474,7 @@ void loadObjects() {
 	setTerrain();
 	setBuilding();
 	setSkybox();
-	setSun();
-	setShrub();
+	lightPosition = glm::vec3(xJet, yJet+14, zJet+6);
 }
 
 
@@ -504,7 +485,7 @@ int main() {
 
 	initialize();
 	loadObjects();
-	///Load the shaders
+	///Load the shaders for Jet/Skybox/Sun/houses
 	shader= LoadShaders("COMP371_hw1.vs", "COMP371_hw1.fs");
 	MVP_id = glGetUniformLocation(shader, "MVP");
 	TextureID = glGetUniformLocation(shader, "myTextureSampler");
@@ -512,6 +493,45 @@ int main() {
 	ModelMatrixID = glGetUniformLocation(shader, "M");
 	LightID = glGetUniformLocation(shader, "LightPosition_worldspace");
 
+	// Load shaders for snow
+
+	// Create and compile our GLSL program from the shaders
+	programID = LoadShaders("Particle.vertexshader", "Particle.fragmentshader");
+
+	// Vertex shader
+	CameraRight_worldspace_ID = glGetUniformLocation(programID, "CameraRight_worldspace");
+	CameraUp_worldspace_ID = glGetUniformLocation(programID, "CameraUp_worldspace");
+	ViewProjMatrixID = glGetUniformLocation(programID, "VP");
+
+	// fragment shader
+	pTextureID = glGetUniformLocation(programID, "myTextureSampler");
+
+	static GLfloat* g_particule_position_size_data = new GLfloat[MaxParticles * 4];
+	static GLubyte* g_particule_color_data = new GLubyte[MaxParticles * 4];
+
+
+	for (int i = 0; i<MaxParticles; i++) {
+		ParticlesContainer[i].life = -1.0f;
+		ParticlesContainer[i].cameradistance = -1.0f;
+	}
+
+	glGenVertexArrays(1, &VertexArrayID);
+	glBindVertexArray(VertexArrayID);
+	glGenBuffers(1, &billboard_vertex_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, billboard_vertex_buffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(g_vertex_buffer_data), g_vertex_buffer_data, GL_STATIC_DRAW);
+
+	// The VBO containing the positions and sizes of the particles
+	glGenBuffers(1, &particles_position_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
+	// Initialize with empty (NULL) buffer : it will be updated later, each frame.
+	glBufferData(GL_ARRAY_BUFFER, MaxParticles * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+
+	// The VBO containing the colors of the particles
+	glGenBuffers(1, &particles_color_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
+	// Initialize with empty (NULL) buffer : it will be updated later, each frame.
+	glBufferData(GL_ARRAY_BUFFER, MaxParticles * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
 
 	view = glm::lookAt(
 		camera,
@@ -522,8 +542,8 @@ int main() {
 	//create the projection matrix
 	projection = glm::perspective(45.0f, (float)w / h, 0.1f, 500.0f);
 	
-	glGenVertexArrays(5, vao);
-	glGenBuffers(15, vbo);
+	glGenVertexArrays(4, vao);
+	glGenBuffers(12, vbo);
 	
 	glBindVertexArray(vao[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
@@ -598,23 +618,7 @@ int main() {
 	glBindBuffer(GL_ARRAY_BUFFER, vbo[11]);
 	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-	glBindVertexArray(vao[4]);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[12]);
-	glBufferData(GL_ARRAY_BUFFER, sunVertices.size() * sizeof(glm::vec3), &sunVertices[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[13]);
-	glBufferData(GL_ARRAY_BUFFER, sunUvs.size() * sizeof(glm::vec2), &sunUvs[0], GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[14]);
-	glBufferData(GL_ARRAY_BUFFER, sunNormals.size() * sizeof(glm::vec3), &sunNormals[0], GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[12]);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[13]);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-	glEnableVertexAttribArray(2);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo[14]);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	double slastTime = glfwGetTime();
 
 	while (!glfwWindowShouldClose(window)) {
 		lastTime = glfwGetTime();
@@ -622,18 +626,20 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glPointSize(point_size);
 		
-		glUseProgram(shader);
+		
 
-		lastTime = glfwGetTime();
-		moveJet(30000.0f);
+		moveJet(8000.0f);
 		view = glm::lookAt(
 			camera,
 			look,
 			up
 			);
-		//lightPosition = glm::vec3(xSun, ySun, zSun);
+		CameraPosition = camera;
+		ViewProjectionMatrix = projection*view;
+		glUseProgram(shader);
 		glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, glm::value_ptr(view));
 		glUniform3f(LightID, lightPosition.x, lightPosition.y, lightPosition.z);
+
 
 		MVP = projection*view*jetModel;
 		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
@@ -654,31 +660,20 @@ int main() {
 		glDrawArrays(GL_TRIANGLES, 0, skyboxVertices.size());
 
 
-		MVP = projection*view*sunModel;
-		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, sunTexture);
-		glUniform1i(TextureID, 0);
-		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(sunModel));
-		glBindVertexArray(vao[4]);
-		glDrawArrays(GL_TRIANGLES, 0, sunVertices.size());
-
-
-
 		for (int i = 0; i < terrainModels.size(); i++) {
 			MVP = projection*view*terrainModels[i];
 			glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 			glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(terrainModels[i]));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, terrainTexture);
-			//glUniform1i(TextureID, 0);
+			glUniform1i(TextureID, 0);
 
 			glBindVertexArray(vao[1]);
 			glDrawArrays(GL_TRIANGLES, 0, terrainVertices.size());
 		}
 
 		for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 7; j++) {
+			for (int j = 0; j < 8; j++) {
 				MVP = projection*view*buildModels[i][j];
 				glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
 				glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(buildModels[i][j]));
@@ -690,19 +685,26 @@ int main() {
 			}
 		}
 
-		for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 10; j++) {
-				MVP = projection*view*shrubModels[i][j];
-				glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
-				glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(shrubModels[i][j]));
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, shrubTexture);
-				glUniform1i(TextureID, 0);
-				glBindVertexArray(vao[4]);
-				glDrawArrays(GL_TRIANGLES, 0, shrubVertices.size());
-			}
-		}
-		
+		glm::mat4 model1 = glm::translate(identityM, glm::vec3(-2, -2, -2));
+		MVP = projection*view*model1;
+		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(model1));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, shrubTexture);
+		glUniform1i(TextureID, 0);
+		glBindVertexArray(vao[4]);
+		glDrawArrays(GL_TRIANGLES, 0, shrubVertices.size());
+
+		glm::mat4 model2 = glm::translate(identityM, glm::vec3(-4, -2, -2));
+		MVP = projection*view*model1;
+		glUniformMatrix4fv(MVP_id, 1, GL_FALSE, glm::value_ptr(MVP));
+		glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, glm::value_ptr(model2));
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, shrubTexture);
+		glUniform1i(TextureID, 0);
+		glBindVertexArray(vao[4]);
+		glDrawArrays(GL_TRIANGLES, 0, shrubVertices.size());
+
 		//TODO: Once you have passed all information you are ready to do the drawing
 		//glDrawElements(..........)
 		if ((int)look.z % 425 ==0 && already == 0) {
@@ -717,6 +719,155 @@ int main() {
 		if ((int)look.z % 52 == 0) {
 			already = 0;
 		}
+
+		double scurrentTime = glfwGetTime();
+		double delta = scurrentTime - slastTime;
+		slastTime = scurrentTime;
+
+		int newparticles = (int)(delta*10000.0);
+		if (newparticles > (int)(0.006f*10000.0))
+			newparticles = (int)(0.006f*10000.0);
+		for (int i = 0; i<newparticles; i++) {
+			int particleIndex = FindUnusedParticle();
+			ParticlesContainer[particleIndex].life = 10.0f; // This particle will live 5 seconds.
+			
+			ParticlesContainer[particleIndex].pos = glm::vec3(0, 50, snowMov);
+			float spread = 20.0f;
+			glm::vec3 maindir = glm::vec3(0.0f, -10.0f, 0.0f);
+			// Very bad way to generate a random direction; 
+			// See for instance http://stackoverflow.com/questions/5408276/python-uniform-spherical-distribution instead,
+			// combined with some user-controlled parameters (main direction, spread, etc)
+			glm::vec3 randomdir = glm::vec3(
+				(rand() % 2000 - 1000.0f) / 1000.0f,
+				(rand() % 2000 - 1000.0f) / 1000.0f,
+				(rand() % 2000 - 1000.0f) / 1000.0f
+				);
+
+			ParticlesContainer[particleIndex].speed = maindir + randomdir*spread;
+
+
+
+			ParticlesContainer[particleIndex].size = (rand() % 1000) / 2000.0f + 0.1f;
+
+		}
+
+
+
+		// Simulate all particles
+		int ParticlesCount = 0;
+		for (int i = 0; i<MaxParticles; i++) {
+
+			Particle& p = ParticlesContainer[i]; // shortcut
+
+			if (p.life > 0.0f) {
+
+				// Decrease life
+				p.life -= delta;
+				if (p.life > 0.0f) {
+
+					// Simulate simple physics : gravity only, no collisions
+					p.speed += glm::vec3(0.0f, -4.81f, 0.5f) * (float)delta * 0.5f;
+					p.pos += p.speed * (float)delta;
+					p.cameradistance = glm::length2(p.pos - CameraPosition);
+					//ParticlesContainer[i].pos += glm::vec3(0.0f,10.0f, 0.0f) * (float)delta;
+
+					// Fill the GPU buffer
+					g_particule_position_size_data[4 * ParticlesCount + 0] = p.pos.x;
+					g_particule_position_size_data[4 * ParticlesCount + 1] = p.pos.y;
+					g_particule_position_size_data[4 * ParticlesCount + 2] = p.pos.z;
+
+					g_particule_position_size_data[4 * ParticlesCount + 3] = p.size;
+
+				}
+				else {
+					// Particles that just died will be put at the end of the buffer in SortParticles();
+					p.cameradistance = -1.0f;
+				}
+
+				ParticlesCount++;
+
+			}
+		}
+
+		SortParticles();
+		glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
+		glBufferData(GL_ARRAY_BUFFER, MaxParticles * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See above link for details.
+		glBufferSubData(GL_ARRAY_BUFFER, 0, ParticlesCount * sizeof(GLfloat) * 4, g_particule_position_size_data);
+
+		glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
+		glBufferData(GL_ARRAY_BUFFER, MaxParticles * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See above link for details.
+		glBufferSubData(GL_ARRAY_BUFFER, 0, ParticlesCount * sizeof(GLubyte) * 4, g_particule_color_data);
+
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		glUseProgram(programID);
+
+		// Bind our texture in Texture Unit 0
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, sTexture);
+		// Set our "myTextureSampler" sampler to user Texture Unit 0
+		glUniform1i(pTextureID, 0);
+
+		// Same as the billboards tutorial
+		glUniform3f(CameraRight_worldspace_ID, view[0][0], view[1][0], view[2][0]);
+		glUniform3f(CameraUp_worldspace_ID, view[0][1], view[1][1], view[2][1]);
+
+		glUniformMatrix4fv(ViewProjMatrixID, 1, GL_FALSE, &ViewProjectionMatrix[0][0]);
+
+		// 1rst attribute buffer : vertices
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, billboard_vertex_buffer);
+		glVertexAttribPointer(
+			0,                  // attribute. No particular reason for 0, but must match the layout in the shader.
+			3,                  // size
+			GL_FLOAT,           // type
+			GL_FALSE,           // normalized?
+			0,                  // stride
+			(void*)0            // array buffer offset
+			);
+
+		// 2nd attribute buffer : positions of particles' centers
+		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
+		glVertexAttribPointer(
+			1,                                // attribute. No particular reason for 1, but must match the layout in the shader.
+			4,                                // size : x + y + z + size => 4
+			GL_FLOAT,                         // type
+			GL_FALSE,                         // normalized?
+			0,                                // stride
+			(void*)0                          // array buffer offset
+			);
+
+		// 3rd attribute buffer : particles' colors
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
+		glVertexAttribPointer(
+			2,                                // attribute. No particular reason for 1, but must match the layout in the shader.
+			4,                                // size : r + g + b + a => 4
+			GL_UNSIGNED_BYTE,                 // type
+			GL_TRUE,                          // normalized?    *** YES, this means that the unsigned char[4] will be accessible with a vec4 (floats) in the shader ***
+			0,                                // stride
+			(void*)0                          // array buffer offset
+			);
+
+
+		glVertexAttribDivisor(0, 0); // particles vertices : always reuse the same 4 vertices -> 0
+		glVertexAttribDivisor(1, 1); // positions : one per quad (its center)                 -> 1
+		glVertexAttribDivisor(2, 1); // color : one per quad                                  -> 1
+
+									 // Draw the particules !
+									 // This draws many times a small triangle_strip (which looks like a quad).
+									 // This is equivalent to :
+									 // for(i in ParticlesCount) : glDrawArrays(GL_TRIANGLE_STRIP, 0, 4), 
+									 // but faster.
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, ParticlesCount);
+
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
+
 		// update other events like input handling 
 		glfwPollEvents();
 		// put the stuff we've been drawing onto the display
